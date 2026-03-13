@@ -1,0 +1,35 @@
+#pragma once
+
+#include <QtWidgets/QMainWindow>
+#include "ui_TCPApp.h"
+#include <QTcpSocket>
+#include <QTcpServer>
+#include <QHostAddress>
+
+class TCPApp : public QMainWindow
+{
+    Q_OBJECT
+
+public:
+    TCPApp(QWidget *parent = nullptr);
+    ~TCPApp();
+
+private slots:
+    void NewApp();
+    void ClearChat();
+    void QuitApp();
+    void ShowHow();
+    void ShowInfo();
+    void SendMessage();
+    void ConnectToPeer();
+    void StartServer();
+    void HandleNewConnection();
+    void ReadMessage();
+
+private:
+    Ui::TCPAppClass* ui;
+    QTcpSocket* socket = nullptr; // conexiunea client
+    QTcpServer* server = nullptr; // server
+    QTcpSocket* clientConnection = nullptr; // clientul care se conecteaza la server
+};
+

@@ -416,3 +416,11 @@ FodyWeavers.xsd
 *.msix
 *.msm
 *.msp
+
+# Qt generated files
+ui_*.h
+moc_*.cpp
+qrc_*.cpp
+*.moc
+*.rcc
+*.qrc.dep
