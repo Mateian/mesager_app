@@ -5,6 +5,7 @@
 #include <QTcpSocket>
 #include <QTcpServer>
 #include <QHostAddress>
+#include <qlist.h>
 
 class TCPApp : public QMainWindow
 {
@@ -30,6 +31,6 @@ private:
     Ui::TCPAppClass* ui;
     QTcpSocket* socket = nullptr; // conexiunea client
     QTcpServer* server = nullptr; // server
-    QTcpSocket* clientConnection = nullptr; // clientul care se conecteaza la server
+    QList<QTcpSocket*> clients;
 };
 

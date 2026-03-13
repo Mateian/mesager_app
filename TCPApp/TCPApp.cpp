@@ -38,8 +38,10 @@ void TCPApp::SendMessage() {
             socket->write(data);
         }
 
-        if (clientConnection && clientConnection->state() == QAbstractSocket::ConnectedState) {
-            clientConnection->write(data);
+        for (QTcpSocket* client : clients) {
+            if (client->state() == QAbstractSocket::ConnectedState) {
+                client->write(data);
+            }
         }
 
         ui->messageLineEdit->clear();
@@ -63,12 +65,15 @@ void TCPApp::NewApp() {
 
     if (socket && socket->state() == QAbstractSocket::ConnectedState) {
         socket->disconnectFromHost();
-        if (clientConnection->state() != QAbstractSocket::UnconnectedState) {
-            clientConnection->waitForDisconnected();
-        }
-        ui->messagesText->append("Client connection closed.");
+        socket->waitForDisconnected();
     }
+    for (QTcpSocket* client : clients) {
+        client->disconnectFromHost();
+        client->waitForDisconnected();
+    }
+    clients.clear();
     ui->messagesText->clear();
+    ui->messagesText->append("Client connection closed.");
     ui->messageLineEdit->clear();
     ui->ipText->clear();
     ui->portText->clear();
@@ -131,15 +136,31 @@ void TCPApp::StartServer() {
 }
 
 void TCPApp::HandleNewConnection() {
-    clientConnection = server->nextPendingConnection();
-    connect(clientConnection, &QTcpSocket::readyRead, this, &TCPApp::ReadMessage);
-    ui->messagesText->append("<span style='color:orange'>Client connected: " + clientConnection->peerAddress().toString() + "</span>");
+    QTcpSocket *client = server->nextPendingConnection();
+    clients.append(client);
+
+    connect(client, &QTcpSocket::readyRead, this, &TCPApp::ReadMessage);
+    connect(client, &QTcpSocket::disconnected, this, [=]() {
+        clients.removeOne(client);
+        client->deleteLater();
+        ui->messagesText->append("<span style='color:orange'>Client disconnected.</span>");
+    });
+    ui->messagesText->append("<span style='color:orange'>Client connected: " + client->peerAddress().toString() + "</span>");
 }
 
 void TCPApp::ReadMessage() {
     QTcpSocket* senderSocket = qobject_cast<QTcpSocket*>(sender());
     if (senderSocket) {
         QByteArray data = senderSocket->readAll();
-        ui->messagesText->append("<span style='color:red'>Peer</span>: " + QString::fromUtf8(data));
+        QString msg = QString::fromUtf8(data);
+        ui->messagesText->append("<span style='color:red'>" + senderSocket->peerAddress().toString() + "</span>: " + msg);
+    
+        if (server && senderSocket != socket) {
+            for (QTcpSocket* client : clients) {
+                if (client != senderSocket && client->state() == QAbstractSocket::ConnectedState) {
+                    client->write(data);
+                }
+            }
+        }
     }
 }
