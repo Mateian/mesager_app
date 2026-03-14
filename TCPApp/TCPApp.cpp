@@ -1,4 +1,5 @@
 #include "TCPApp.h"
+#include <qthread.h>
 #include "QMessageBox.h"
 
 TCPApp::TCPApp(QWidget *parent)
@@ -15,7 +16,7 @@ TCPApp::TCPApp(QWidget *parent)
     connect(ui->messageLineEdit, &QLineEdit::returnPressed, this, &TCPApp::SendMessage);
     connect(ui->connectButton, &QPushButton::clicked, this, &TCPApp::ConnectToPeer);
     connect(ui->startServerButton, &QPushButton::clicked, this, &TCPApp::StartServer);
-
+    connect(ui->sendFileButton, &QPushButton::clicked, this, &TCPApp::SendFile);
 }
 
 TCPApp::~TCPApp()
@@ -150,11 +151,28 @@ void TCPApp::HandleNewConnection() {
 
 void TCPApp::ReadMessage() {
     QTcpSocket* senderSocket = qobject_cast<QTcpSocket*>(sender());
-    if (senderSocket) {
-        QByteArray data = senderSocket->readAll();
-        QString msg = QString::fromUtf8(data);
-        ui->messagesText->append("<span style='color:red'>" + senderSocket->peerAddress().toString() + "</span>: " + msg);
-    
+    if (!senderSocket) return;
+
+    QByteArray data = senderSocket->readAll();
+
+    if (receivingFile && receivingFile->isOpen()) {
+        bytesReceived += data.size();
+        receivingFile->write(data);
+
+        if (bytesReceived >= totalBytes) {
+            receivingFile->close();
+
+            if (receivingFile->open(QIODevice::ReadOnly)) {
+                QByteArray fileData = receivingFile->readAll();
+                receivingFile->close();
+                SaveReceivedFile(receivingFile->fileName(), fileData);
+            }
+
+            receivingFile->remove();
+            delete receivingFile;
+            receivingFile = nullptr;
+        }
+
         if (server && senderSocket != socket) {
             for (QTcpSocket* client : clients) {
                 if (client != senderSocket && client->state() == QAbstractSocket::ConnectedState) {
@@ -162,5 +180,169 @@ void TCPApp::ReadMessage() {
                 }
             }
         }
+        return;
+    }
+
+    if (data.startsWith("FILE")) {
+        int newlineIndex = data.indexOf("\n");
+        if (newlineIndex != -1) {
+            QByteArray headerData = data.left(newlineIndex);
+            QByteArray remainingData = data.mid(newlineIndex + 1);
+
+            QString msg = QString::fromUtf8(headerData);
+            QStringList parts = msg.split(' ');
+
+            if (parts.size() >= 3) {
+                QString fileName = parts[1];
+                qint64 fileSize = parts.last().toLongLong();
+
+                receivingFile = new QFile(fileName);
+                if (!receivingFile->open(QIODevice::WriteOnly)) {
+                    ui->messagesText->append("<span style='color:red'>Error: Save File</span>");
+                    return;
+                }
+
+                totalBytes = fileSize;
+                bytesReceived = 0;
+                ui->messagesText->append("<span style='color:green'>Downloading " + fileName + " file...</span>");
+
+                if (remainingData.size() > 0) {
+                    bytesReceived += remainingData.size();
+                    receivingFile->write(remainingData);
+
+                    if (bytesReceived >= totalBytes) {
+                        receivingFile->close();
+
+                        if (receivingFile->open(QIODevice::ReadOnly)) {
+                            QByteArray fileData = receivingFile->readAll();
+                            receivingFile->close();
+                            SaveReceivedFile(receivingFile->fileName(), fileData);
+                        }
+
+                        receivingFile->remove();
+                        delete receivingFile;
+                        receivingFile = nullptr;
+                    }
+                }
+            }
+        }
+    }
+    else {
+        QString msg = QString::fromUtf8(data);
+        ui->messagesText->append("<span style='color:red'>" + senderSocket->peerAddress().toString() + "</span>: " + msg);
+    }
+
+    if (server && senderSocket != socket) {
+        for (QTcpSocket* client : clients) {
+            if (client != senderSocket && client->state() == QAbstractSocket::ConnectedState) {
+                client->write(data);
+            }
+        }
+    }
+}
+
+//void TCPApp::ReadMessage() {
+//    QTcpSocket* senderSocket = qobject_cast<QTcpSocket*>(sender());
+//    if (senderSocket) {
+//        QByteArray data = senderSocket->readAll();
+//        QString msg = QString::fromUtf8(data);
+//
+//        if (msg.startsWith("FILE")) {
+//            QStringList parts = msg.split(' ');
+//            if (parts.size() == 3) {
+//                QString fileName = parts[1];
+//                qint64 fileSize = parts[2].toLongLong();
+//
+//                receivingFile = new QFile(fileName);
+//                if (!receivingFile->open(QIODevice::WriteOnly)) {
+//                    ui->messagesText->append("<span style='color:red'>Error: Save File</span>");
+//                    return;
+//                }
+//
+//                totalBytes = fileSize;
+//                bytesReceived = 0;
+//                ui->messagesText->append("<span style='color:green'>Downloading " + fileName + " file...</span>");
+//            }
+//        }
+//        else {
+//            if (receivingFile) {
+//                bytesReceived += data.size();
+//                receivingFile->write(data);
+//
+//                if (bytesReceived == totalBytes) {
+//                    receivingFile->close();
+//
+//                    if (receivingFile->open(QIODevice::ReadOnly)) {
+//                        QByteArray fileData = receivingFile->readAll();
+//                        receivingFile->close();
+//                        SaveReceivedFile(receivingFile->fileName(), fileData);
+//                    }
+//
+//                    receivingFile->remove();
+//                    delete receivingFile;
+//
+//                    receivingFile = nullptr;
+//
+//                    ui->messagesText->append("<span style='color:green'>" + senderSocket->peerAddress().toString() + "File received successfully.</span>: " + msg);
+//                }
+//            }
+//            else {
+//                ui->messagesText->append("<span style='color:red'>" + senderSocket->peerAddress().toString() + "</span>: " + msg);
+//            }
+//        }
+//
+//        //if (receivingFile && bytesReceived == totalBytes) {
+//        //    QByteArray fileData = receivingFile->readAll();
+//        //    receivingFile->close();
+//        //    SaveReceivedFile(receivingFile->fileName(), fileData);
+//        //    receivingFile = nullptr;
+//        //}
+//    
+//        if (server && senderSocket != socket) {
+//            for (QTcpSocket* client : clients) {
+//                if (client != senderSocket && client->state() == QAbstractSocket::ConnectedState) {
+//                    client->write(data);
+//                }
+//            }
+//        }
+//    }
+//}
+
+void TCPApp::SendFile() {
+    QString filePath = QFileDialog::getOpenFileName(this, "Select the file to send");
+    if (filePath.isEmpty()) return;
+
+    QFile file(filePath);
+    if (!file.open(QIODevice::ReadOnly)) {
+        ui->messagesText->append("<span style='color:red'>Error: Open File</span>");
+        return;
+    }
+
+    QString filename = QFileInfo(filePath).fileName();
+    QByteArray fileData = file.readAll();
+    QByteArray header = QString("FILE %1 %2\n").arg(filename).arg(fileData.size()).toUtf8();
+
+    socket->write(header);
+    socket->flush();
+
+    QThread::msleep(100);
+
+    socket->write(fileData);
+    socket->flush();
+    ui->messagesText->append("<span style='color:green'>File " + filename + " sent.</span>");
+}
+
+void TCPApp::SaveReceivedFile(const QString& filename, const QByteArray& filedata) {
+    QString savePath = QFileDialog::getSaveFileName(this, "Save file", filename);
+    if (savePath.isEmpty()) return;
+
+    QFile file(savePath);
+    if (file.open(QIODevice::WriteOnly)) {
+        file.write(filedata);
+        file.close();
+        ui->messagesText->append("<span style='color:green'>File " + filename + " saved.</span>");
+    }
+    else {
+        ui->messagesText->append("<span style='color:red'>Error: File " + filename + " not saved.</span>");
     }
 }

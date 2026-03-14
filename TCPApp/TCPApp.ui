@@ -167,6 +167,19 @@
      <string>Start Server</string>
     </property>
    </widget>
+   <widget class="QPushButton" name="sendFileButton">
+    <property name="geometry">
+     <rect>
+      <x>560</x>
+      <y>270</y>
+      <width>80</width>
+      <height>24</height>
+     </rect>
+    </property>
+    <property name="text">
+     <string>Send File</string>
+    </property>
+   </widget>
   </widget>
   <widget class="QMenuBar" name="menuBar">
    <property name="geometry">

@@ -6,6 +6,8 @@
 #include <QTcpServer>
 #include <QHostAddress>
 #include <qlist.h>
+#include <QFileDialog>
+#include <QFile>
 
 class TCPApp : public QMainWindow
 {
@@ -26,11 +28,16 @@ private slots:
     void StartServer();
     void HandleNewConnection();
     void ReadMessage();
+    void SendFile();
+    void SaveReceivedFile(const QString &filename, const QByteArray &filedata);
 
 private:
     Ui::TCPAppClass* ui;
     QTcpSocket* socket = nullptr; // conexiunea client
     QTcpServer* server = nullptr; // server
     QList<QTcpSocket*> clients;
+    QFile* receivingFile = nullptr;
+    qint64 totalBytes = 0;
+    qint64 bytesReceived = 0;
 };
 
